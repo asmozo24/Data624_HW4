@@ -1,0 +1,265 @@
+---
+title: "Data624_HW4"
+author: "Alexis Mekueko"
+date: "10/3/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r load-packages, results='hide',warning=FALSE, message=FALSE, echo=FALSE}
+
+##library(tidyverse) #loading all library needed for this assignment
+#remove.packages(tidyverse)
+#library(openintro)
+#library(lahman) #database for baseball
+library(caret)
+library(knitr)
+#library(markdown)
+#library(rmarkdown)
+library(dplyr)
+library(tidyr)
+library(naniar)
+library(reshape)
+library(ggplot2)
+library(qqplotr)
+library(stats)
+library(statsr)
+library(GGally)
+library(pdftools)
+library(correlation)
+library(Metrics)
+library(e1071)
+library(rocc)
+library(pROC)
+library(plm)
+library(car)
+#library(VIF)
+#library(MASS)
+#library(AICcmodavg)
+#library(gridExtra)
+#library(ggpubr)
+#library(glmulti)
+
+#install.packages("datarobot", dependencies = TRUE)
+
+library(datarobot)
+#install.packages("fpp3", dependencies = TRUE)
+library(fpp3)
+#install.packages("lubridate", dependencies = TRUE)
+library(lubridate)
+#install.packages("tsibble", dependencies = TRUE)
+library(tsibble)
+library(tsibbledata)
+#install.packages("USgas", dependencies = TRUE)
+#install.packages('Rcpp')
+library(Rcpp)
+#update.packages(Rcpp)
+library(USgas)
+library(MASS)
+library(forecast)
+set.seed(34332)
+
+
+```
+
+[Github Link](https://github.com/asmozo24/Data624_HW4)
+[Web Link](https://rpubs.com/amekueko/814927)
+
+
+## Assignment:
+Do problems 3.1 and 3.2 in the Kuhn and Johnson book Applied Predictive Modeling.  Please submit your Rpubs link along with your .rmd code.
+
+## Exercises
+3.1. The UC Irvine Machine Learning Repository6 contains a data set related
+to glass identification. The data consist of 214 glass samples labeled as one
+of seven class categories. There are nine predictors, including the refractive
+index and percentages of eight elements: Na, Mg, Al, Si, K, Ca, Ba, and Fe.
+
+
+a- Using visualizations, explore the predictor variables to understand their distributions as well as the relationships between predictors.
+
+
+
+
+
+```{r mychunck1, fig.width = 10, fig.height = 10}
+
+library(mlbench)
+library(purrr)
+data(Glass)
+#str(Glass)
+#view(Glass)
+sum(is.na(Glass))
+
+sapply(Glass, class)
+Glass1 <-  dplyr::select(Glass, -Type)
+
+Glass %>%
+  head(05)%>%
+  kable()
+summary(Glass)
+
+
+Glass1 %>%
+  keep(is.numeric) %>%                     # Keep only numeric columns
+  gather() %>%                             # Convert to key-value pairs
+  ggplot(aes(value)) +                     # Plot the values
+    facet_wrap(~ key, scales = "free") +   # In separate panels
+    geom_density() +                        # as density
+  theme_dark()
+cat("\nAnother way of looking at the data distribution for all 8 variables (Na, Mg, Al, Si, K, Ca, Ba, and Fe).")
+df1 <- c(1:1, 2:9)
+df2 <- Glass1[ , -10]
+par(mfrow = c(3,5))
+for (i in df1) {
+  #hist(X[ ,i], xlab = names(X[i]), main = names(X[i]))
+  d <- density(df2[,i])
+  plot(d, main = names(df2[i]))
+  polygon(d, col="blue")
+}
+
+# Not sure if I should convert the variable "Type" in numeric datatype
+#hist(Glass$Type,main = " Distribution of predicted Elements Type ",xlab = "Probability of Element", col = 'blue')
+
+out <- boxplot.stats(Glass1$Na)$out
+boxplot(Glass1$Na,
+  ylab = "Value of element",
+  main = "Boxplot of 8 variables (Na, Mg, Al, Si, K, Ca, Ba, and Fe)"
+)
+mtext(paste("Outliers: ", paste(out, collapse = ", ")))
+
+Outlier = boxplot(stack(Glass1), plot=TRUE)$out
+
+library(outliers)
+# df1a <- c(1:9)
+# df2a <- Glass1[ , -10]
+# for (i in df1a) {
+# outlier(df2a$i)
+# }
+# 
+outlier(Glass1$Na)
+outlier(Glass1$Mg)
+outlier(Glass1$Al)
+outlier(Glass1$Al)
+outlier(Glass1$Si)
+outlier(Glass$K)
+outlier(Glass1$Ca)
+outlier(Glass1$Ba)
+outlier(Glass1$Fe)
+```
+
+(b) Do there appear to be any outliers in the data? Yes, there are outliers in the data. Are any predictors skewed? Yes! Based on the density plot, we see many elements(variables) right and left skewed. 
+(c) Are there any relevant transformations of one or more predictors that might improve the classification model? On this predictive analysis, the classification model is based on the variable "Type". This variable could be redefined (or I did not find the definition of the variables), then some variable could be transformed (maybe use log() function ), then apply boxcox to better visualize the outliers. but for the classification model all the variable excepted "RI" and "Type" variables should be group by value range, this way, we can easilly define the x variable when applying the machine leaning. 
+
+
+## Exercise 3.2. 
+The soybean data can also be found at the UC Irvine Machine Learning Repository. Data were collected to predict disease in 683 soybeans. The 35 predictors are mostly categorical and include information on the environmental conditions (e.g., temperature, precipitation) and plant conditions (e.g., left spots, mold growth). The outcome labels consist of 19 distinct classes.
+
+(a) Investigate the frequency distributions for the categorical predictors. Are any of the distributions degenerate in the ways discussed earlier in this chapter?
+
+```{r mychunck2, echo = FALSE, fig.width = 10, fig.height = 10}
+library(mlbench)
+data("Soybean")
+?Soybean
+
+
+#sapply(Soybean, class)
+
+Soybean %>%
+  head(05)%>%
+  kable()
+summary(Soybean)
+
+str(Soybean)
+
+
+Soybean1 <- dplyr::select(Soybean, -Class, -date)
+convert <- function(df){
+  as.numeric(as.character(df))
+}
+numeric_func <- function(df){
+  modifyList(df, lapply(df[, sapply(df, is.factor)],convert))
+}
+Soybean1 <- numeric_func(Soybean1)
+
+
+
+Soybean1 %>%
+  gather() %>%                             # Convert to key-value pairs
+  ggplot(aes(value)) +                     # Plot the values
+    facet_wrap(~ key, scales = "free") +   # In separate panels
+    geom_density() +                        # as density
+  theme_dark()
+nearZeroVar(Soybean1)
+
+library(correlation)
+library(corrplot)
+correlations <- cor(Soybean1)
+#corrplot(correlations, order = "hclust")
+
+highCorr <- findCorrelation(correlations, cutoff = .75)
+length(highCorr)
+#head(highCorr)
+
+
+```
+Based on the frequency plots, we don't see a degenarated distribution(As there is no spread of variables around the mean, the variance for the degenerate distribution is zero (Var(X) = 0))...because there is no constant value among variables. If we observed little variation, we could say we have a degenarated distribution. We could also use the correlation function to find if there are variable with high correlation(meaning explaning the same underlying response). However, there many missing values rendering the plot difficult. the findCorrelation() with cutoff at 75% on Soybean dataframe output zero. This means we should not delete a variable.
+
+
+(b) Roughly 18 % of the data are missing. Are there particular predictors that are more likely to be missing? Is the pattern of missing data related to the classes?
+
+
+```{r mychunck3, echo = FALSE, fig.width = 10, fig.height = 10}
+
+dim(Soybean)
+
+miss_value <- (sum(is.na(Soybean))/prod(dim(Soybean)))*100
+cat("Total missing values from Soybean data is : ", sum(is.na(Soybean)))
+cat("\n ")
+cat("The percentage of missing values from Soybean data is: ", miss_value)
+#apply(Soybean, 2, function(col)sum(is.na(col))/length(col))
+round (mean(is.na(Soybean))*100, 2)
+
+```
+
+```{r, mychunck3s, echo = FALSE, fig.width = 10, fig.height = 10, echo=FALSE}
+missing.values <- function(df){
+    df %>%
+    gather(key = "variables", value = "val") %>%
+    mutate(is.missing = is.na(val)) %>%
+    group_by(variables, is.missing) %>%
+    summarise(number.missing = n()) %>%
+    filter(is.missing==T) %>%
+    dplyr::select(-is.missing) %>%
+    arrange(desc(number.missing)) 
+}
+
+missing.values(Soybean)%>% kable()
+
+# This plot of missing values isn't working.
+
+# plot missing values
+ # missing.values(inc) %>%
+ #   ggplot() +
+ #     geom_bar(aes(x=variables, y=number.missing), stat = 'identity', col='blue') +
+ #     labs(x='variables', y="number of missing values", title='Number of missing values') +
+ #   theme(axis.text.x = element_text(angle = 100, hjust = 0.2))
+
+#Another way of visualizing missing value
+#vis_miss(training_df)
+gg_miss_var(Soybean, show_pct = TRUE) + labs(y = "Missing Values in % to total record")+ theme()
+#colSums(is.na(Soybean1))%>% kable()
+#cat("\n Even more, the table below shows the total number of missing values per variable")
+apply(is.na(Soybean), 2, sum)
+
+```
+There are many variables with missing values. We cannot tell whether there is a pattern on missing values but the plot of missing values show were to look at when dealing with removing NA.
+
+(c) Develop a strategy for handling missing data, either by eliminating predictors or imputation.
+This missing value looks like a structural one. Meaning, there was no value recorded at the time the data was generated. The nearZerVar() output shows that we cannot delete a variable. This means will use imputation to handle missing data. There variant techniques in imputation method. One we have used in the past is imputation by mean(). Another strategyy to explore discussed by the book is a function, impute.knn, that uses K-
+nearest neighbor model(A new sample is imputed by finding the samples in the training set “closest”
+to it and averages these nearby points to fill in the value) to estimate the missing data.
